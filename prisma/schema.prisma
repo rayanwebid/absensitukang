@@ -1,0 +1,192 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  username     String   @unique
+  email        String?  @unique
+  passwordHash String
+  role         String   @default("PENGAWAS") // SUPER_ADMIN, PENGAWAS, TUKANG
+  status       String   @default("ACTIVE")    // ACTIVE, INACTIVE
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  auditLogs          AuditLog[]
+  supervisorProjects Project[] @relation("SupervisorProjects")
+}
+
+model Worker {
+  id          String   @id @default(cuid())
+  workerCode  String   @unique // e.g. TKG-001
+  name        String
+  phone       String?
+  jobType     String   // e.g. Tukang Batu, Tukang Kayu, Tukang Besi, Tukang Cat, Mandor
+  status      String   @default("ACTIVE") // ACTIVE, INACTIVE
+  startDate   DateTime @default(now())
+  photoUrl    String?  // Optional display thumbnail
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  faceProfile   FaceProfile?
+  attendances   Attendance[]
+  assignments   WorkerAssignment[]
+  leaveRequests LeaveRequest[]
+}
+
+model FaceProfile {
+  id                 String   @id @default(cuid())
+  workerId           String   @unique
+  worker             Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  encryptedEmbedding String   // JSON stringified 128-d float array
+  modelVersion       String   @default("vladmandic-face-api-v1")
+  consentStatus      Boolean  @default(true)
+  consentTimestamp   DateTime @default(now())
+  samplePhoto        String?  // Base64 thumbnail
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model WorkSchedule {
+  id          String   @id @default(cuid())
+  name        String   @default("Jadwal Standar Proyek SMKS Muh 2")
+  startTime   String   @default("07:00") // HH:mm (WIB)
+  endTime     String   @default("16:00") // HH:mm (WIB)
+  gracePeriod Int      @default(15)      // minutes tolerance
+  workDays    String   @default("1,2,3,4,5,6") // Monday to Saturday
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  attendances Attendance[]
+}
+
+model Attendance {
+  id                 String        @id @default(cuid())
+  workerId           String
+  worker             Worker        @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workDate           String        // "YYYY-MM-DD"
+  checkInAt          DateTime?
+  checkOutAt         DateTime?
+  status             String        @default("HADIR") // HADIR, TERLAMBAT, IZIN, SAKIT, ALPA, MANUAL
+  scheduleId         String?
+  schedule           WorkSchedule? @relation(fields: [scheduleId], references: [id])
+  checkInPhoto       String?       // Base64 snapshot
+  checkOutPhoto      String?       // Base64 snapshot
+  checkInVerifiedBy  String        @default("FACE_BIOMETRIC") // FACE_BIOMETRIC or Supervisor Name/ID
+  checkOutVerifiedBy String?
+  notes              String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  events             AttendanceEvent[]
+  corrections        AttendanceCorrection[]
+
+  @@unique([workerId, workDate])
+}
+
+model AttendanceEvent {
+  id                 String     @id @default(cuid())
+  attendanceId       String
+  attendance         Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  eventType          String     // CHECK_IN, CHECK_OUT, MANUAL_OVERRIDE, CORRECTION
+  serverTimestamp    DateTime   @default(now())
+  verificationResult String     // SUCCESS, FAILED, MANUAL
+  distanceScore      Float?     // Euclidean distance e.g. 0.32
+  livenessScore      Float?     // Liveness confidence score
+  reason             String?    // Reason for manual override or note
+  actorName          String?    // Tukang or Supervisor Name
+  photoSnapshot      String?    // Base64 snapshot
+  createdAt          DateTime   @default(now())
+}
+
+model Project {
+  id           String    @id @default(cuid())
+  projectName  String
+  location     String    @default("Lingkungan SMKS Muhammadiyah 2 Genteng")
+  supervisorId String?
+  supervisor   User?     @relation("SupervisorProjects", fields: [supervisorId], references: [id])
+  description  String?
+  status       String    @default("IN_PROGRESS") // PLANNING, IN_PROGRESS, COMPLETED, ON_HOLD
+  startDate    DateTime  @default(now())
+  endDate      DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  assignments  WorkerAssignment[]
+}
+
+model WorkerAssignment {
+  id            String    @id @default(cuid())
+  workerId      String
+  worker        Worker    @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  roleInProject String?   // Mandor, Tukang Utama, Pembantu Tukang
+  startDate     DateTime  @default(now())
+  endDate       DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+}
+
+model LeaveRequest {
+  id             String    @id @default(cuid())
+  workerId       String
+  worker         Worker    @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  leaveType      String    // IZIN, SAKIT
+  startDate      DateTime
+  endDate        DateTime
+  reason         String
+  attachmentUrl  String?
+  approvalStatus String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedBy     String?   // Supervisor name
+  approvalNotes  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model AttendanceCorrection {
+  id               String     @id @default(cuid())
+  attendanceId     String
+  attendance       Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  proposedCheckIn  DateTime?
+  proposedCheckOut DateTime?
+  proposedStatus   String?
+  reason           String
+  requestedBy      String
+  approvedBy       String?
+  status           String     @default("PENDING") // PENDING, APPROVED, REJECTED
+  reviewNotes      String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  actorName  String
+  action     String   // FACE_REGISTRATION, MANUAL_CHECKIN, UPDATE_SCHEDULE, CORRECTION_APPROVED, dsb.
+  entityType String   // WORKER, ATTENDANCE, SCHEDULE, PROJECT, USER, SYSTEM
+  entityId   String?
+  timestamp  DateTime @default(now())
+  metadata   String?  // JSON string
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+}
+
+model SystemSetting {
+  id           String   @id @default(cuid())
+  settingKey   String   @unique
+  settingValue String
+  description  String?
+  updatedBy    String?
+  updatedAt    DateTime @updatedAt
+}

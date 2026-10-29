@@ -1,0 +1,22 @@
+{
+  "name": "Absensi Tukang - SMKS Muhammadiyah 2 Genteng",
+  "short_name": "Absen Tukang",
+  "description": "Sistem Absensi Tukang Berbasis Face Recognition SMKS Muhammadiyah 2 Genteng",
+  "start_url": "/absensi",
+  "display": "standalone",
+  "background_color": "#0A4D68",
+  "theme_color": "#0A4D68",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
